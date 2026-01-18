@@ -1,5 +1,4 @@
 plugins {
-    signing
     `java-library`
     id("com.vanniktech.maven.publish") version "0.34.0"
 }
@@ -42,16 +41,6 @@ dependencies {
 afterEvaluate {
     tasks.named("generateMetadataFileForMavenPublication") {
         mustRunAfter("plainJavadocJar", "sourcesJar")
-    }
-}
-
-signing {
-    val key = System.getenv("ORG_GRADLE_PROJECT_signingInMemoryKey")?.replace("\\n", "\n")
-    val password = System.getenv("ORG_GRADLE_PROJECT_signingInMemoryKeyPassword")
-
-    if (!key.isNullOrEmpty() && !password.isNullOrEmpty()) {
-        useInMemoryPgpKeys(key, password)
-        sign(publishing.publications)
     }
 }
 

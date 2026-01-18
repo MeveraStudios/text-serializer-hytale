@@ -19,7 +19,6 @@ version = if (isSnapshot && releaseSnapshots) "$baseVersion-SNAPSHOT" else baseV
 
 java {
     withSourcesJar()
-    withJavadocJar()
 }
 
 tasks.withType<JavaCompile>().configureEach {
@@ -40,7 +39,7 @@ dependencies {
 
 afterEvaluate {
     tasks.named("generateMetadataFileForMavenPublication") {
-        mustRunAfter("plainJavadocJar", "sourcesJar")
+        dependsOn("plainJavadocJar", "sourcesJar")
     }
 }
 

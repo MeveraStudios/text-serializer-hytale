@@ -1,0 +1,150 @@
+name: Build
+
+on:
+  push:
+    branches: [ "master", "experimental" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: ✅ Checkout Project
+        uses: actions/checkout@v4
+
+      - name: 📐 Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: corretto
+          java-version: 17
+
+      - name: 📐 Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Cache Gradle dependencies and wrapper (skip for pull requests)
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: 🔍 Figure repository info
+        run: |
+          chmod +x ./gradlew
+
+          # Fetch latest release tag from public API
+          TAG_JSON=$(curl -s https://api.github.com/repos/MeveraStudios/${GITHUB_REPOSITORY}/tags)
+  
+          # Check if jq can parse the tag
+          TAG=$(echo "$TAG_JSON" | jq -r '.[0].name' 2>/dev/null)
+  
+          # If jq fails or result is empty, print the response and exit
+          if [ -z "$TAG" ] || [ "$TAG" == "null" ]; then
+            echo "❌ Failed to extract latest tag from GitHub. Full response:"
+            echo "$TAG_JSON"
+            exit 1
+          fi
+  
+          CLEANED_TAG=${TAG#v}
+          echo "LATEST_RELEASE=$CLEANED_TAG" >> $GITHUB_ENV
+
+          # Get current version from Gradle
+          if ! CURRENT_VERSION=$(./gradlew -q printVersion | grep baseVersion | cut -d'=' -f2); then
+            echo "❌ Failed to get current version from Gradle"
+            exit 1
+          fi
+          echo "VERSION=$CURRENT_VERSION" >> $GITHUB_ENV
+
+          # Determine if this is a snapshot release
+          if ! SNAPSHOT=$(./gradlew -q printReleaseSnapshots | grep releaseSnapshots | cut -d'=' -f2); then
+            echo "❌ Failed to determine snapshot status from Gradle"
+            exit 1
+          fi
+          echo "RELEASE_SNAPSHOTS=$SNAPSHOT" >> $GITHUB_ENV
+
+          # Log info to console
+          echo "🔹 Latest GitHub Release Tag: $CLEANED_TAG"
+          echo "🔹 Gradle Version: $CURRENT_VERSION"
+          echo "🔹 Is Snapshot Release: $SNAPSHOT"
+
+          # Add everything to GitHub summary
+          {
+            echo "### 🧾 Repository Info"
+            echo "- 🔖 Latest Release Tag: \`$CLEANED_TAG\`"
+            echo "- 🏷️  Current Version: \`$CURRENT_VERSION\`"
+            echo "- 🧪 Is Snapshot Release: \`$SNAPSHOT\`"
+            echo "### Build Type: $([[ \"$SNAPSHOT\" == \"true\" ]] && echo \"📦 Snapshot\" || echo \"🧪 Regular\")"
+          } >> $GITHUB_STEP_SUMMARY
+
+      - name: 🚀 Gradle Snapshot
+        id: publish_snapshot
+        if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/experimental') && env.RELEASE_SNAPSHOTS == 'true' }}
+        env:
+          SNAPSHOT_BUILD: true
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.MAVEN_SIGNING_KEY }}
+          # ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.MAVEN_SIGNING_KEY_ID }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.MAVEN_SIGNING_PASSWORD }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew test publishAllPublicationsToMavenCentralRepository --info
+
+      - name: 🧪 Gradle Test (No Publish)
+        if: ${{ steps.publish_snapshot.outcome != 'success' && steps.publish_snapshot.outcome != 'failure' }}
+        env:
+          SNAPSHOT_BUILD: false
+        run: |
+          chmod +x ./gradlew
+          ./gradlew test --info
+
+      - name: 📝 Summarize Failed Tests
+        if: failure()
+        run: |
+          echo "## ❌ Failed Tests Summary" >> $GITHUB_STEP_SUMMARY
+          # Check if any test result XML files exist
+          if ! find . -path "*/build/test-results/test/*.xml" | grep -q .; then
+            echo "No test results found. Build likely failed before tests ran." >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
+          # Process XML files if they exist
+          find . -type f -path "*/build/test-results/test/*.xml" | while read file; do
+            module=$(echo "$file" | cut -d/ -f2)
+            fails=$(grep -c "<failure" "$file")
+            if [ "$fails" -gt 0 ]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "**$module:**" >> $GITHUB_STEP_SUMMARY
+              grep -A 1 "<testcase" "$file" | grep -B 1 "<failure" | grep -E "<testcase|<failure" | while read line; do
+                if [[ "$line" == *"<testcase"* ]]; then
+                  classname=$(echo "$line" | sed -n 's/.*classname="\([^"]*\)".*/\1/p')
+                  name=$(echo "$line" | sed -n 's/.*name="\([^"]*\)".*/\1/p')
+                  echo "- ${classname##*.}.${name}" >> $GITHUB_STEP_SUMMARY
+                elif [[ "$line" == *"<failure"* ]]; then
+                  message=$(echo "$line" | sed -n 's/.*<failure[^>]*message="\([^"]*\)".*/\1/p')
+                  if [ -z "$message" ]; then
+                    message="(no message)"
+                  fi
+                  echo "  → $message" >> $GITHUB_STEP_SUMMARY
+                fi
+              done
+            fi
+          done
+
+      - name: 📦 Archive all test reports (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: '**/build/reports/tests/test'

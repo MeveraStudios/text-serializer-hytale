@@ -83,6 +83,17 @@ Component component = Component.text("Important Message")
 Message message = HytaleComponentSerializer.get().serialize(component);
 ```
 
+#### Click Events (Links)
+
+```java
+// Add a clickable link
+Component component = Component.text("Visit our website")
+    .color(NamedTextColor.AQUA)
+    .clickEvent(ClickEvent.openUrl("https://example.com"));
+
+Message message = HytaleComponentSerializer.get().serialize(component);
+```
+
 ## Supported Features
 
 ### Text Components
@@ -104,6 +115,9 @@ Message message = HytaleComponentSerializer.get().serialize(component);
 - ✅ Underline
 - ✅ Monospace (mapped to/from obfuscated)
 
+### Click Events
+- ✅ Open URL links
+
 ### Structure
 - ✅ Nested children
 - ✅ Recursive serialization/deserialization
@@ -118,6 +132,16 @@ Message message = HytaleComponentSerializer.get().serialize(component);
 | `UNDERLINED`    | `underlined` | Direct mapping                |
 | `OBFUSCATED`    | `monospace`  | Closest equivalent mapping    |
 | `STRIKETHROUGH` | ❌            | Not supported in Hytale       |
+
+### Click Events
+
+| Adventure                      | Hytale | Notes          |
+|--------------------------------|--------|----------------|
+| `ClickEvent.OPEN_URL`          | `link` | Direct mapping |
+| `ClickEvent.RUN_COMMAND`       | ❌      | Not supported  |
+| `ClickEvent.SUGGEST_COMMAND`   | ❌      | Not supported  |
+| `ClickEvent.CHANGE_PAGE`       | ❌      | Not supported  |
+| `ClickEvent.COPY_TO_CLIPBOARD` | ❌      | Not supported  |
 
 ## Translation Argument Types
 
@@ -140,10 +164,10 @@ TranslationArgument.component(Component.text("Hello"));
 ## Limitations
 
 - **Strikethrough**: Not supported by Hytale's message system
-- **Click Events**: Not currently implemented
-- **Hover Events**: Not currently implemented
-- **Insertions**: Not currently implemented
-- **Fonts**: Not currently implemented
+- **Click Events**: Only `OPEN_URL` is supported (commands, suggestions, etc. are not available)
+- **Hover Events**: Not supported by Hytale's message system
+- **Insertions**: Not supported by Hytale's message system
+- **Fonts**: Not supported by Hytale's message system
 
 ## Installation
 

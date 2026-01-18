@@ -43,7 +43,7 @@ jobs:
           chmod +x ./gradlew
 
           # Fetch latest release tag from public API
-          TAG_JSON=$(curl -s https://api.github.com/repos/MeveraStudios/${GITHUB_REPOSITORY}/tags)
+          TAG_JSON=$(curl -s https://api.github.com/repos/MeveraStudios/text-serializer-hytale/tags)
   
           # Check if jq can parse the tag
           TAG=$(echo "$TAG_JSON" | jq -r '.[0].name' 2>/dev/null)

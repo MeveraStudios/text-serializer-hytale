@@ -39,6 +39,12 @@ dependencies {
     compileOnly("org.jetbrains:annotations:26.0.2-1")
 }
 
+afterEvaluate {
+    tasks.named("generateMetadataFileForMavenPublication") {
+        mustRunAfter("plainJavadocJar", "sourcesJar")
+    }
+}
+
 signing {
     val key = System.getenv("ORG_GRADLE_PROJECT_signingInMemoryKey")?.replace("\\n", "\n")
     val password = System.getenv("ORG_GRADLE_PROJECT_signingInMemoryKeyPassword")
